@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Web Verify</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gauge-circle { transition: stroke-dashoffset 1s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+    <nav class="w-full bg-slate-800 p-4 shadow-lg border-b border-slate-700">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-shield-virus text-teal-400 text-2xl"></i>
+                <span class="font-bold text-xl tracking-wide">WebGuard Global</span>
+            </div>
+            <select id="langSelect" onchange="changeLanguage()" class="bg-slate-700 text-white px-3 py-1 rounded border border-slate-600 focus:outline-none focus:border-teal-400">
+                <option value="en">English 🇬🇧</option>
+                <option value="hu">Magyar 🇭🇺</option>
+                <option value="de">Deutsch 🇩🇪</option>
+                <option value="es">Español 🇪🇸</option>
+            </select>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto mt-12 p-6">
+        
+        <div class="text-center mb-10">
+            <h1 id="title" class="text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-blue-500">
+                Advanced URL Verification
+            </h1>
+            <p id="subtitle" class="text-slate-400 text-lg">
+                Deep analysis of SSL, DNS, WHOIS, and Content to detect fraud.
+            </p>
+        </div>
+
+        <div class="bg-slate-800 p-2 rounded-full flex shadow-xl border border-slate-700 relative z-10">
+            <input type="text" id="urlInput" placeholder="https://example.com" class="bg-transparent w-full px-6 py-4 text-white focus:outline-none placeholder-slate-500">
+            <button onclick="runAnalysis()" id="analyzeBtn" class="bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold rounded-full px-8 py-3 transition-all transform hover:scale-105">
+                CHECK
+            </button>
+        </div>
+
+        <div id="loader" class="hidden mt-8 text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-400"></div>
+            <p id="scanningText" class="mt-4 text-teal-300 animate-pulse">Scanning worldwide databases...</p>
+        </div>
+
+        <div id="results" class="hidden mt-10">
+            
+            <div class="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8">
+                <div class="text-center md:text-left">
+                    <h2 id="trustScoreLabel" class="text-slate-400 uppercase tracking-widest text-sm font-semibold">Trust Score</h2>
+                    <div id="riskBadge" class="mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-gray-700 text-gray-300">
+                        CALCULATING...
+                    </div>
+                </div>
+                
+                <div class="relative w-32 h-32">
+                    <svg class="w-full h-full" viewBox="0 0 100 100">
+                        <circle class="text-slate-700 stroke-current" stroke-width="8" cx="50" cy="50" r="40" fill="transparent"></circle>
+                        <circle id="scoreCircle" class="text-teal-500 progress-ring__circle stroke-current" stroke-width="8" stroke-linecap="round" cx="50" cy="50" r="40" fill="transparent" stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
+                    </svg>
+                    <div class="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+                        <span id="scoreValue" class="text-3xl font-bold">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <h3 id="techHeader" class="text-teal-400 font-bold mb-4 border-b border-slate-700 pb-2">Technical Analysis</h3>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex justify-between">
+                            <span class="text-slate-400">Domain Age:</span>
+                            <span id="resAge" class="font-mono text-white">...</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-slate-400">SSL Certificate:</span>
+                            <span id="resSSL" class="font-mono text-white">...</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-slate-400">Email Config (MX):</span>
+                            <span id="resMX" class="font-mono text-white">...</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span class="text-slate-400">Entropy:</span>
+                            <span id="resEntropy" class="font-mono text-white">...</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <h3 id="logHeader" class="text-teal-400 font-bold mb-4 border-b border-slate-700 pb-2">Detection Logs</h3>
+                    <div id="logContainer" class="space-y-2 max-h-40 overflow-y-auto pr-2 text-sm">
+                        </div>
+                </div>
+            </div>
+            
+            <button onclick="location.reload()" class="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition">
+                <i class="fas fa-redo mr-2"></i> <span id="resetBtn">Check Another URL</span>
+            </button>
+
+        </div>
+    </main>
+
+    <script>
+        const translations = {
+            en: {
+                title: "Advanced URL Verification",
+                subtitle: "Deep analysis of SSL, DNS, WHOIS, and Content to detect fraud.",
+                placeholder: "https://example.com",
+                btn: "CHECK",
+                scanning: "Scanning worldwide databases...",
+                trustScore: "TRUST SCORE",
+                tech: "Technical Analysis",
+                logs: "Detection Logs",
+                reset: "Check Another URL",
+                safe: "SAFE",
+                caution: "CAUTION",
+                danger: "DANGER / SCAM",
+                domainAge: "Domain Age",
+                ssl: "SSL Security",
+                mx: "Email Config (MX)"
+            },
+            hu: {
+                title: "Fejlett Weboldal Ellenőrző",
+                subtitle: "Mélyreható SSL, DNS, WHOIS és tartalom elemzés a csalások kiszűrésére.",
+                placeholder: "https://pelda.hu",
+                btn: "ELLENŐRZÉS",
+                scanning: "Globális adatbázisok keresése...",
+                trustScore: "BIZALMI PONTSZÁM",
+                tech: "Technikai Elemzés",
+                logs: "Észlelt Hibák",
+                reset: "Új Ellenőrzés",
+                safe: "BIZTONSÁGOS",
+                caution: "GYANÚS",
+                danger: "VESZÉLYES / CSALÁS",
+                domainAge: "Domain Kora",
+                ssl: "SSL Biztonság",
+                mx: "Email Konfig (MX)"
+            },
+            de: {
+                title: "Erweiterte URL-Überprüfung",
+                subtitle: "Tiefenanalyse von SSL, DNS, WHOIS und Inhalt zur Betrugserkennung.",
+                placeholder: "https://beispiel.de",
+                btn: "PRÜFEN",
+                scanning: "Scannen weltweiter Datenbanken...",
+                trustScore: "VERTRAUENSWERT",
+                tech: "Technische Analyse",
+                logs: "Erkennungsprotokolle",
+                reset: "Neue Prüfung",
+                safe: "SICHER",
+                caution: "VORSICHT",
+                danger: "GEFAHR / BETRUG",
+                domainAge: "Domain Alter",
+                ssl: "SSL Sicherheit",
+                mx: "Email Konfig (MX)"
+            },
+            es: {
+                title: "Verificación Avanzada de URL",
+                subtitle: "Análisis profundo de SSL, DNS, WHOIS y contenido para detectar fraudes.",
+                placeholder: "https://ejemplo.es",
+                btn: "VERIFICAR",
+                scanning: "Escaneando bases de datos globales...",
+                trustScore: "PUNTUACIÓN",
+                tech: "Análisis Técnico",
+                logs: "Registros de Detección",
+                reset: "Verificar Otro",
+                safe: "SEGURO",
+                caution: "PRECAUCIÓN",
+                danger: "PELIGRO / ESTAFA",
+                domainAge: "Edad del Dominio",
+                ssl: "Seguridad SSL",
+                mx: "Config Email (MX)"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function changeLanguage() {
+            currentLang = document.getElementById('langSelect').value;
+            const t = translations[currentLang];
+            
+            document.getElementById('title').innerText = t.title;
+            document.getElementById('subtitle').innerText = t.subtitle;
+            document.getElementById('urlInput').placeholder = t.placeholder;
+            document.getElementById('analyzeBtn').innerText = t.btn;
+            document.getElementById('scanningText').innerText = t.scanning;
+            document.getElementById('trustScoreLabel').innerText = t.trustScore;
+            document.getElementById('techHeader').innerText = t.tech;
+            document.getElementById('logHeader').innerText = t.logs;
+            document.getElementById('resetBtn').innerText = t.reset;
+        }
+
+        async function runAnalysis() {
+            const url = document.getElementById('urlInput').value;
+            if(!url) return;
+
+            // UI Updates
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('loader').classList.remove('hidden');
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url: url})
+                });
+                
+                const data = await response.json();
+                
+                // Hide Loader
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('results').classList.remove('hidden');
+
+                if(data.error) {
+                    alert(data.error); 
+                    return;
+                }
+
+                // Update Score Visuals
+                const t = translations[currentLang];
+                const circle = document.getElementById('scoreCircle');
+                const radius = circle.r.baseVal.value;
+                const circumference = radius * 2 * Math.PI;
+                const offset = circumference - (data.score / 100) * circumference;
+                
+                circle.style.strokeDashoffset = offset;
+                
+                // Color coding based on score
+                if(data.score >= 80) circle.classList.replace('text-yellow-500', 'text-teal-500') || circle.classList.add('text-teal-500');
+                else if(data.score >= 50) {
+                    circle.classList.remove('text-teal-500');
+                    circle.classList.add('text-yellow-500');
+                } else {
+                    circle.classList.remove('text-teal-500', 'text-yellow-500');
+                    circle.classList.add('text-red-500');
+                }
+
+                document.getElementById('scoreValue').innerText = data.score;
+                
+                const badge = document.getElementById('riskBadge');
+                if(data.risk_level === "SAFE") {
+                    badge.innerText = t.safe;
+                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-teal-500/20 text-teal-300 border border-teal-500/50";
+                } else if (data.risk_level === "CAUTION") {
+                    badge.innerText = t.caution;
+                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/50";
+                } else {
+                    badge.innerText = t.danger;
+                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-red-500/20 text-red-300 border border-red-500/50";
+                }
+
+                // Details
+                document.getElementById('resAge').innerText = data.details.age;
+                document.getElementById('resSSL').innerHTML = data.details.ssl ? '<i class="fas fa-check text-green-400"></i>' : '<i class="fas fa-times text-red-400"></i>';
+                document.getElementById('resMX').innerHTML = data.details.mx ? '<i class="fas fa-check text-green-400"></i>' : '<i class="fas fa-times text-red-400"></i>';
+                document.getElementById('resEntropy').innerText = data.details.entropy;
+
+                // Logs
+                const logContainer = document.getElementById('logContainer');
+                logContainer.innerHTML = '';
+                if(data.logs.length === 0) {
+                    logContainer.innerHTML = `<div class="text-green-400"><i class="fas fa-check-circle"></i> No warnings found.</div>`;
+                } else {
+                    data.logs.forEach(log => {
+                        const div = document.createElement('div');
+                        const colorClass = log.type === 'danger' ? 'text-red-400' : 'text-yellow-400';
+                        const icon = log.type === 'danger' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+                        div.className = `${colorClass} flex gap-2 items-start`;
+                        div.innerHTML = `<i class="fas ${icon} mt-1"></i> <span>${log.msg}</span>`;
+                        logContainer.appendChild(div);
+                    });
+                }
+
+            } catch(e) {
+                console.error(e);
+                alert("Error analyzing URL. Check console.");
+            }
+        }
+    </script>
+</body>
+</html>
