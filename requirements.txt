@@ -1,9 +1,10 @@
 flask
-python-whois
 requests
+python-whois
 beautifulsoup4
 dnspython
-textdistance
-gunicorn
-fake-useragent
 tldextract
+fake-useragent
+gunicorn
+textdistance
+python-dotenv

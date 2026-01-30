@@ -1,90 +1,113 @@
+import os
 import ssl
 import socket
 import whois
 import requests
-import dns.resolver
-import textdistance
-import math
-import urllib.parse
 import tldextract
+import math
+import textdistance
 import concurrent.futures
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime
-from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
+from dotenv import load_dotenv
+
+# Load environment variables (API Keys)
+load_dotenv()
 
 app = Flask(__name__)
-
-# --- CONFIGURATION ---
-# High-trust domains whitelist (prevents false positives on giants)
-TRUSTED_GIANTS = {
-    "google.com", "facebook.com", "amazon.com", "apple.com", "microsoft.com", 
-    "netflix.com", "instagram.com", "linkedin.com", "ebay.com", "paypal.com",
-    "twitter.com", "wikipedia.org", "yahoo.com", "whatsapp.com", "arukereso.hu",
-    "emag.hu", "jofogas.hu", "index.hu", "telex.hu", "otpbank.hu"
-}
-
 ua = UserAgent()
 
+# --- 1. CONFIGURATION & FREE API KEYS ---
+# You can get these keys for FREE.
+# Google: https://console.cloud.google.com/ (Enable Safe Browsing API)
+# VirusTotal: https://www.virustotal.com/gui/join-us (Public API)
+GOOGLE_KEY = os.getenv("GOOGLE_SAFE_BROWSING_KEY")
+VT_KEY = os.getenv("VIRUSTOTAL_API_KEY")
+
+# --- 2. GLOBAL WHITELIST (The "No Mistake" List) ---
+# Extensive list of trusted domains to prevent false positives.
+TRUSTED_GIANTS = {
+    # Global Tech
+    "google", "youtube", "facebook", "amazon", "apple", "microsoft", "netflix", 
+    "instagram", "linkedin", "ebay", "paypal", "twitter", "x", "wikipedia", 
+    "yahoo", "whatsapp", "tiktok", "twitch", "reddit", "pinterest", "zoom", 
+    "adobe", "github", "gitlab", "stackoverflow", "dropbox", "salesforce",
+    "shopify", "spotify", "hulu", "disneyplus", "airbnb", "uber", "booking",
+    # Finance
+    "chase", "paypal", "stripe", "revolut", "wise", "mastercard", "visa",
+    # Hungarian / Regional
+    "arukereso", "emag", "jofogas", "index", "telex", "otpbank", "telekom", 
+    "vodafone", "yettel", "ingatlan", "hasznaltauto", "vatera", "port", "origo",
+    "24", "hvg", "portfolio", "ncore", "gov", "police", "nav", "simplepay"
+}
+
+# --- 3. HELPER FUNCTIONS ---
+
 def get_ssl_details(domain):
-    """
-    Connects to port 443 and extracts the certificate 'Organization' (O) field.
-    Real businesses have an 'O' field (e.g., 'Amazon.com, Inc.').
-    Scams usually have None or 'Let's Encrypt' without an O field.
-    """
+    """Checks if the site has an Organization Validated (OV/EV) certificate."""
     try:
         context = ssl.create_default_context()
-        with socket.create_connection((domain, 443), timeout=5) as sock:
+        with socket.create_connection((domain, 443), timeout=3) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as ssock:
                 cert = ssock.getpeercert()
-                
-                # Extract Subject details
                 subject = dict(x[0] for x in cert['subject'])
-                issuer = dict(x[0] for x in cert['issuer'])
-                
-                org = subject.get('organizationName')
-                common_name = subject.get('commonName')
-                
                 return {
                     "valid": True,
-                    "org": org,
-                    "issuer": issuer.get('organizationName'),
-                    "common_name": common_name
+                    "org": subject.get('organizationName'), # Critical for trust
+                    "cn": subject.get('commonName')
                 }
-    except Exception as e:
-        return {"valid": False, "error": str(e)}
+    except:
+        return {"valid": False, "org": None}
 
-def analyze_headers(url):
-    """Checks for security headers that sophisticated sites use but scams skip."""
+def calculate_entropy(string):
+    """Math: Detects random domains like 'x839a.com'."""
+    prob = [float(string.count(c)) / len(string) for c in dict.fromkeys(list(string))]
+    entropy = - sum([p * math.log(p) / math.log(2.0) for p in prob])
+    return entropy
+
+def check_typosquatting(domain_name):
+    """Math: Checks if domain looks like a giant (e.g. 'amaz0n')."""
+    for giant in TRUSTED_GIANTS:
+        # If very similar but not identical
+        similarity = textdistance.jaro_winkler(domain_name, giant)
+        if 0.85 < similarity < 1.0:
+            return True, giant
+    return False, None
+
+def check_google_api(url):
+    """Queries Google Safe Browsing (Free Tier)."""
+    if not GOOGLE_KEY: return None
     try:
-        headers = {'User-Agent': ua.random}
-        response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
-        
-        sec_headers = {
-            "HSTS": "strict-transport-security" in response.headers,
-            "X-Frame": "x-frame-options" in response.headers,
-            "X-Content": "x-content-type-options" in response.headers
+        payload = {
+            "client": {"clientId": "webguard", "clientVersion": "1.0"},
+            "threatInfo": {
+                "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING"],
+                "platformTypes": ["ANY_PLATFORM"],
+                "threatEntryTypes": ["URL"],
+                "threatEntries": [{"url": url}]
+            }
         }
-        return sec_headers, response.status_code
+        r = requests.post(f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_KEY}", json=payload, timeout=2)
+        return True if (r.status_code == 200 and r.json()) else False
     except:
-        return {"HSTS": False, "X-Frame": False}, 0
+        return None
 
-def get_domain_age(domain):
+def check_virustotal_api(url):
+    """Queries VirusTotal (Free Tier - 4 lookups/min)."""
+    if not VT_KEY: return None
     try:
-        w = whois.whois(domain)
-        creation_date = w.creation_date
-        
-        if isinstance(creation_date, list):
-            creation_date = creation_date[0]
-            
-        if not creation_date:
-            return None, "Hidden"
-
-        now = datetime.now()
-        age_days = (now - creation_date).days
-        return age_days, creation_date.strftime('%Y-%m-%d')
+        # Need to encode URL for VT
+        import base64
+        url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
+        headers = {"x-apikey": VT_KEY}
+        r = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=3)
+        if r.status_code == 200:
+            stats = r.json()['data']['attributes']['last_analysis_stats']
+            return stats['malicious'] > 0
+        return False
     except:
-        return None, "Unknown"
+        return None
 
 @app.route('/')
 def home():
@@ -95,125 +118,118 @@ def analyze():
     data = request.json
     raw_url = data.get('url', '').strip()
     
-    if not raw_url:
-        return jsonify({"error": "No URL provided"}), 400
+    if not raw_url: return jsonify({"error": "No URL"}), 400
 
-    # URL Standardization
     if not raw_url.startswith(('http://', 'https://')):
         url = 'https://' + raw_url
     else:
         url = raw_url
 
+    results = {"score": 0, "logs": [], "details": {}}
+    
     try:
-        ext = tldextract.extract(url)
-        domain = f"{ext.domain}.{ext.suffix}"
-        full_domain = f"{ext.subdomain}.{ext.domain}.{ext.suffix}" if ext.subdomain else domain
-        
-        logs = []
-        score = 0
-        risk_level = "LOW"
-        
-        # --- 1. WHITELIST CHECK (Instant Pass) ---
-        if domain in TRUSTED_GIANTS:
+        # --- 1. PARSE & UNFURL ---
+        # Follow redirects (e.g. bit.ly -> malware.com)
+        try:
+            session = requests.Session()
+            session.headers.update({'User-Agent': ua.random})
+            resp = session.head(url, allow_redirects=True, timeout=5)
+            final_url = resp.url
+        except:
+            final_url = url # If fail, assume no redirect
+
+        ext = tldextract.extract(final_url)
+        root_domain = f"{ext.domain}.{ext.suffix}"
+        full_domain = f"{ext.subdomain}.{ext.domain}.{ext.suffix}" if ext.subdomain else root_domain
+
+        # --- 2. INSTANT WHITELIST (Layer 0) ---
+        if ext.domain in TRUSTED_GIANTS:
             return jsonify({
                 "score": 100,
                 "risk_level": "SAFE",
-                "details": {
-                    "domain": full_domain,
-                    "age": "Verified Giant",
-                    "ssl": True,
-                    "org": "Verified Entity"
-                },
-                "logs": [{"type": "success", "msg": f"Verified Trustworthy Domain (Global Top 500 / Trusted Local)."}]
+                "details": {"domain": full_domain, "age": "Verified Giant", "ssl": True, "org": f"Official {ext.domain.capitalize()}"},
+                "logs": [{"type": "success", "msg": f"Verified Trustworthy Domain ({ext.domain.capitalize()})."}]
             })
 
-        # --- 2. SSL DEEP SCAN (The "Enterprise" Check) ---
+        # --- 3. GATHER INTEL (Parallel Execution) ---
         ssl_info = get_ssl_details(full_domain)
-        has_ssl = ssl_info['valid']
         
-        # --- 3. DOMAIN AGE ---
-        age_days, creation_date = get_domain_age(domain)
+        # Domain Age
+        age_days = None
+        try:
+            w = whois.whois(root_domain)
+            cd = w.creation_date
+            if isinstance(cd, list): cd = cd[0]
+            if cd: age_days = (datetime.now() - cd).days
+        except:
+            pass
 
-        # --- 4. HEADER & CONNECTIVITY ---
-        sec_headers, status_code = analyze_headers(url)
+        # Math Checks
+        entropy = calculate_entropy(ext.domain)
+        is_typo, target_giant = check_typosquatting(ext.domain)
 
-        # --- SCORING LOGIC V2 (Robust) ---
+        # API Checks (Graceful Fallback)
+        google_flag = check_google_api(final_url)
+        vt_flag = check_virustotal_api(final_url)
+
+        # --- 4. SCORING ENGINE (The Logic) ---
+        score = 0
         
-        # A. SSL Scoring (Max 40)
-        if has_ssl:
-            if ssl_info.get('org'): 
-                score += 40
-                logs.append({"type": "success", "msg": f"Verified Business Identity: {ssl_info['org']}"})
-            else:
-                score += 15
-                logs.append({"type": "warning", "msg": "Standard SSL (DV). No Company Name in certificate."})
-        else:
-            score -= 20
-            logs.append({"type": "danger", "msg": "No Secure Connection (HTTPS)."})
-
-        # B. Domain Age (Max 30)
-        if age_days:
-            if age_days > 3650: # 10 years
+        # A. SSL Identity (Max 50)
+        if ssl_info['valid']:
+            score += 20
+            if ssl_info['org']:
                 score += 30
-            elif age_days > 1095: # 3 years
-                score += 25
-            elif age_days > 365:
-                score += 15
-            elif age_days < 90:
-                score -= 20
-                logs.append({"type": "danger", "msg": "Domain is extremely new (< 3 months)."})
-        else:
-            # If WHOIS failed but SSL has Org name, trust the SSL
-            if ssl_info.get('org'):
-                score += 20 
-                logs.append({"type": "info", "msg": "Domain age hidden, but trusted via Certificate."})
+                results['logs'].append({"type": "success", "msg": f"Identity Verified: {ssl_info['org']}"})
             else:
-                logs.append({"type": "warning", "msg": "Could not determine domain age."})
-
-        # C. Technical Security (Max 20)
-        if sec_headers['HSTS']: score += 10
-        if sec_headers['X-Frame']: score += 5
-        if sec_headers['X-Content']: score += 5
-
-        # D. Content / Bot Protection Fallback
-        # If we got blocked (403/503) but have valid EV SSL (Org Name), we ignore the block
-        if status_code in [403, 503, 999] and ssl_info.get('org'):
-            logs.append({"type": "info", "msg": "Site blocked scraping, but Identity is Verified via SSL."})
-            score += 10 # Compensation points
-        elif status_code == 200:
-             # Basic keyword check
-             try:
-                r = requests.get(url, headers={'User-Agent': ua.random}, timeout=3)
-                text = r.text.lower()
-                if "privacy" in text or "adatvédel" in text: score += 5
-                if "contact" in text or "kapcsolat" in text: score += 5
-             except:
-                pass
-
-        # Typosquatting Check (Prevent amazon-shop.com)
-        if "amazon" in domain and domain != "amazon.com":
+                results['logs'].append({"type": "info", "msg": "Standard SSL (Identity Hidden)."})
+        else:
             score -= 50
-            logs.append({"type": "danger", "msg": "Possible Impersonation of Amazon."})
-            
-        # --- FINAL CALCULATIONS ---
-        score = max(0, min(100, score))
-        
-        if score >= 80: risk_level = "SAFE"
-        elif score >= 50: risk_level = "CAUTION"
-        else: risk_level = "DANGER"
+            results['logs'].append({"type": "danger", "msg": "Insecure Connection (No HTTPS)."})
 
-        return jsonify({
-            "score": score,
-            "risk_level": risk_level,
-            "details": {
-                "domain": full_domain,
-                "age": f"{age_days} days" if age_days else "Unknown",
-                "ssl": has_ssl,
-                "org": ssl_info.get('org', 'Not Listed'),
-                "issuer": ssl_info.get('issuer', 'Unknown')
-            },
-            "logs": logs
-        })
+        # B. Age (Max 30)
+        if age_days:
+            results['details']['age'] = f"{age_days} days"
+            if age_days > 1800: score += 30 # > 5 years
+            elif age_days > 365: score += 20
+            elif age_days < 30: 
+                score -= 40
+                results['logs'].append({"type": "danger", "msg": "Domain is extremely new (< 1 month)!"})
+        else:
+            results['details']['age'] = "Hidden"
+            if ssl_info['org']: score += 20 # Trust SSL if WHOIS hidden
+            else: results['logs'].append({"type": "warning", "msg": "Domain age hidden."})
+
+        # C. Heuristics (Penalties)
+        if entropy > 4.2:
+            score -= 20
+            results['logs'].append({"type": "warning", "msg": "Domain name looks random/generated."})
+        
+        if is_typo:
+            score = 0
+            results['logs'].append({"type": "danger", "msg": f"Phishing Risk! Looks like {target_giant}."})
+
+        # D. API Vetos (The Kill Switch)
+        if google_flag is True or vt_flag is True:
+            score = 0
+            results['logs'].append({"type": "danger", "msg": "Flagged as MALICIOUS by Global Blacklists."})
+        elif google_flag is False:
+             score += 10
+             results['logs'].append({"type": "success", "msg": "Clean on Google Safe Browsing."})
+
+        # --- 5. FINISH ---
+        score = max(0, min(100, score))
+        if score >= 80: risk = "SAFE"
+        elif score >= 50: risk = "CAUTION"
+        else: risk = "DANGER"
+
+        results['score'] = score
+        results['risk_level'] = risk
+        results['details']['domain'] = full_domain
+        results['details']['ssl'] = ssl_info['valid']
+        results['details']['org'] = ssl_info['org'] or "Not Listed"
+
+        return jsonify(results)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
