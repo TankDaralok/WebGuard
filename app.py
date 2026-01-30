@@ -6,66 +6,85 @@ import dns.resolver
 import textdistance
 import math
 import urllib.parse
+import tldextract
+import concurrent.futures
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
 
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# List of high-value targets often impersonated
-PROTECTED_BRANDS = [
-    "google", "facebook", "amazon", "apple", "microsoft", "paypal", 
-    "netflix", "instagram", "whatsapp", "linkedin", "dropbox", "ebay"
-]
+# High-trust domains whitelist (prevents false positives on giants)
+TRUSTED_GIANTS = {
+    "google.com", "facebook.com", "amazon.com", "apple.com", "microsoft.com", 
+    "netflix.com", "instagram.com", "linkedin.com", "ebay.com", "paypal.com",
+    "twitter.com", "wikipedia.org", "yahoo.com", "whatsapp.com", "arukereso.hu",
+    "emag.hu", "jofogas.hu", "index.hu", "telex.hu", "otpbank.hu"
+}
 
-def calculate_entropy(string):
-    """Calculates randomness of a string. High entropy = potentially auto-generated domain."""
-    prob = [float(string.count(c)) / len(string) for c in dict.fromkeys(list(string))]
-    entropy = - sum([p * math.log(p) / math.log(2.0) for p in prob])
-    return entropy
+ua = UserAgent()
 
-def check_mx_records(domain):
-    """Checks if the domain has valid Mail Exchange records (Legit businesses usually do)."""
+def get_ssl_details(domain):
+    """
+    Connects to port 443 and extracts the certificate 'Organization' (O) field.
+    Real businesses have an 'O' field (e.g., 'Amazon.com, Inc.').
+    Scams usually have None or 'Let's Encrypt' without an O field.
+    """
     try:
-        dns.resolver.resolve(domain, 'MX')
-        return True
-    except:
-        return False
+        context = ssl.create_default_context()
+        with socket.create_connection((domain, 443), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                cert = ssock.getpeercert()
+                
+                # Extract Subject details
+                subject = dict(x[0] for x in cert['subject'])
+                issuer = dict(x[0] for x in cert['issuer'])
+                
+                org = subject.get('organizationName')
+                common_name = subject.get('commonName')
+                
+                return {
+                    "valid": True,
+                    "org": org,
+                    "issuer": issuer.get('organizationName'),
+                    "common_name": common_name
+                }
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
 
-def check_typosquatting(domain):
-    """Checks if domain is suspiciously close to a major brand."""
-    domain_base = domain.split('.')[0]
-    warnings = []
-    
-    for brand in PROTECTED_BRANDS:
-        if brand in domain_base and domain_base != brand:
-            warnings.append(f"Contains brand name '{brand}' but is not official.")
+def analyze_headers(url):
+    """Checks for security headers that sophisticated sites use but scams skip."""
+    try:
+        headers = {'User-Agent': ua.random}
+        response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
         
-        # Jaccard similarity for fuzzy matching
-        similarity = textdistance.jaccard(domain_base, brand)
-        if 0.6 < similarity < 1.0: # High similarity but not identical
-            warnings.append(f"Suspiciously similar to '{brand}' (Typosquatting Risk).")
-            
-    return warnings
+        sec_headers = {
+            "HSTS": "strict-transport-security" in response.headers,
+            "X-Frame": "x-frame-options" in response.headers,
+            "X-Content": "x-content-type-options" in response.headers
+        }
+        return sec_headers, response.status_code
+    except:
+        return {"HSTS": False, "X-Frame": False}, 0
 
-def get_domain_age_detailed(domain):
+def get_domain_age(domain):
     try:
         w = whois.whois(domain)
         creation_date = w.creation_date
-        if isinstance(creation_date, list): creation_date = creation_date[0]
         
-        if not creation_date: return None, "Hidden/Unknown", {}
+        if isinstance(creation_date, list):
+            creation_date = creation_date[0]
+            
+        if not creation_date:
+            return None, "Hidden"
 
         now = datetime.now()
         age_days = (now - creation_date).days
-        
-        # Check registrar (optional: add logic to flag cheap/scammy registrars)
-        registrar = w.registrar if w.registrar else "Unknown"
-        
-        return age_days, creation_date.strftime('%Y-%m-%d'), w
+        return age_days, creation_date.strftime('%Y-%m-%d')
     except:
-        return None, "Unknown", {}
+        return None, "Unknown"
 
 @app.route('/')
 def home():
@@ -79,113 +98,122 @@ def analyze():
     if not raw_url:
         return jsonify({"error": "No URL provided"}), 400
 
+    # URL Standardization
     if not raw_url.startswith(('http://', 'https://')):
         url = 'https://' + raw_url
     else:
         url = raw_url
 
-    results = {
-        "score": 0,
-        "logs": [],
-        "risk_level": "LOW",
-        "details": {}
-    }
-    
     try:
-        parsed = urllib.parse.urlparse(url)
-        domain = parsed.netloc
-        if domain.startswith("www."): domain = domain[4:]
-
-        # 1. SSL/HTTPS Check
-        has_ssl = False
-        try:
-            requests.get(url, timeout=5) # simple connectivity check
-            has_ssl = url.startswith("https")
-        except:
-            results['logs'].append({"type": "danger", "msg": "Site is unreachable or blocking connections."})
-
-        # 2. Domain Age & WHOIS
-        age_days, creation_date, whois_data = get_domain_age_detailed(domain)
+        ext = tldextract.extract(url)
+        domain = f"{ext.domain}.{ext.suffix}"
+        full_domain = f"{ext.subdomain}.{ext.domain}.{ext.suffix}" if ext.subdomain else domain
         
-        # 3. MX Records (Email config)
-        has_mx = check_mx_records(domain)
-        
-        # 4. Typosquatting & Brand Safety
-        typo_warnings = check_typosquatting(domain)
-        
-        # 5. Entropy (Randomness)
-        entropy = calculate_entropy(domain)
-        
-        # --- SCORING ENGINE (Max 100) ---
+        logs = []
         score = 0
+        risk_level = "LOW"
         
-        # Base Trust
-        if has_ssl: score += 15
-        else: results['logs'].append({"type": "danger", "msg": "No SSL Certificate (Not Secure)."})
+        # --- 1. WHITELIST CHECK (Instant Pass) ---
+        if domain in TRUSTED_GIANTS:
+            return jsonify({
+                "score": 100,
+                "risk_level": "SAFE",
+                "details": {
+                    "domain": full_domain,
+                    "age": "Verified Giant",
+                    "ssl": True,
+                    "org": "Verified Entity"
+                },
+                "logs": [{"type": "success", "msg": f"Verified Trustworthy Domain (Global Top 500 / Trusted Local)."}]
+            })
 
-        if has_mx: score += 15
-        else: results['logs'].append({"type": "warning", "msg": "No Email Records (MX) found. Unusual for a real business."})
+        # --- 2. SSL DEEP SCAN (The "Enterprise" Check) ---
+        ssl_info = get_ssl_details(full_domain)
+        has_ssl = ssl_info['valid']
+        
+        # --- 3. DOMAIN AGE ---
+        age_days, creation_date = get_domain_age(domain)
 
-        # Age Logic (Critical)
+        # --- 4. HEADER & CONNECTIVITY ---
+        sec_headers, status_code = analyze_headers(url)
+
+        # --- SCORING LOGIC V2 (Robust) ---
+        
+        # A. SSL Scoring (Max 40)
+        if has_ssl:
+            if ssl_info.get('org'): 
+                score += 40
+                logs.append({"type": "success", "msg": f"Verified Business Identity: {ssl_info['org']}"})
+            else:
+                score += 15
+                logs.append({"type": "warning", "msg": "Standard SSL (DV). No Company Name in certificate."})
+        else:
+            score -= 20
+            logs.append({"type": "danger", "msg": "No Secure Connection (HTTPS)."})
+
+        # B. Domain Age (Max 30)
         if age_days:
-            if age_days > 365*5: score += 30 # > 5 years
-            elif age_days > 365: score += 20 # > 1 year
-            elif age_days > 180: score += 10 # > 6 months
-            else: results['logs'].append({"type": "danger", "msg": f"Domain is very new ({age_days} days). High Risk."})
-        else:
-            results['logs'].append({"type": "warning", "msg": "Could not verify domain age."})
-
-        # Typosquatting Penalty
-        if typo_warnings:
-            score -= 30
-            for w in typo_warnings: results['logs'].append({"type": "danger", "msg": w})
-        else:
-            score += 10 # Bonus for clean name
-
-        # Entropy Penalty (e.g. x7f99a.com)
-        if entropy > 3.5: # Threshold for randomness
-            score -= 15
-            results['logs'].append({"type": "warning", "msg": "Domain name looks random/generated."})
-        
-        # Content Analysis (Scraping)
-        try:
-            r = requests.get(url, timeout=3)
-            soup = BeautifulSoup(r.text, 'html.parser')
-            text = soup.get_text().lower()
-            
-            # Positive Signals
-            if "privacy policy" in text or "privacy" in text: score += 10
-            if "contact" in text or "support" in text: score += 10
-            if "terms" in text: score += 5
-            
-            # Negative Signals (Scam keywords)
-            scam_triggers = ["urgent", "crypto", "bitcoin", "investment", "act now", "lottery"]
-            found_triggers = [t for t in scam_triggers if t in text]
-            if len(found_triggers) > 2:
+            if age_days > 3650: # 10 years
+                score += 30
+            elif age_days > 1095: # 3 years
+                score += 25
+            elif age_days > 365:
+                score += 15
+            elif age_days < 90:
                 score -= 20
-                results['logs'].append({"type": "danger", "msg": f"Detected high-pressure scam keywords: {', '.join(found_triggers)}"})
-                
-        except:
-            results['logs'].append({"type": "warning", "msg": "Could not scan page content (blocked or empty)."})
+                logs.append({"type": "danger", "msg": "Domain is extremely new (< 3 months)."})
+        else:
+            # If WHOIS failed but SSL has Org name, trust the SSL
+            if ssl_info.get('org'):
+                score += 20 
+                logs.append({"type": "info", "msg": "Domain age hidden, but trusted via Certificate."})
+            else:
+                logs.append({"type": "warning", "msg": "Could not determine domain age."})
 
-        # Final Score Normalization
+        # C. Technical Security (Max 20)
+        if sec_headers['HSTS']: score += 10
+        if sec_headers['X-Frame']: score += 5
+        if sec_headers['X-Content']: score += 5
+
+        # D. Content / Bot Protection Fallback
+        # If we got blocked (403/503) but have valid EV SSL (Org Name), we ignore the block
+        if status_code in [403, 503, 999] and ssl_info.get('org'):
+            logs.append({"type": "info", "msg": "Site blocked scraping, but Identity is Verified via SSL."})
+            score += 10 # Compensation points
+        elif status_code == 200:
+             # Basic keyword check
+             try:
+                r = requests.get(url, headers={'User-Agent': ua.random}, timeout=3)
+                text = r.text.lower()
+                if "privacy" in text or "adatvédel" in text: score += 5
+                if "contact" in text or "kapcsolat" in text: score += 5
+             except:
+                pass
+
+        # Typosquatting Check (Prevent amazon-shop.com)
+        if "amazon" in domain and domain != "amazon.com":
+            score -= 50
+            logs.append({"type": "danger", "msg": "Possible Impersonation of Amazon."})
+            
+        # --- FINAL CALCULATIONS ---
         score = max(0, min(100, score))
-        results['score'] = score
         
-        if score >= 80: results['risk_level'] = "SAFE"
-        elif score >= 50: results['risk_level'] = "CAUTION"
-        else: results['risk_level'] = "DANGER"
+        if score >= 80: risk_level = "SAFE"
+        elif score >= 50: risk_level = "CAUTION"
+        else: risk_level = "DANGER"
 
-        results['details'] = {
-            "domain": domain,
-            "age": f"{age_days} days" if age_days else "Unknown",
-            "ssl": has_ssl,
-            "mx": has_mx,
-            "entropy": round(entropy, 2),
-            "registrar": whois_data.get('registrar', 'Unknown')
-        }
-
-        return jsonify(results)
+        return jsonify({
+            "score": score,
+            "risk_level": risk_level,
+            "details": {
+                "domain": full_domain,
+                "age": f"{age_days} days" if age_days else "Unknown",
+                "ssl": has_ssl,
+                "org": ssl_info.get('org', 'Not Listed'),
+                "issuer": ssl_info.get('issuer', 'Unknown')
+            },
+            "logs": logs
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

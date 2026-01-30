@@ -5,3 +5,5 @@ beautifulsoup4
 dnspython
 textdistance
 gunicorn
+fake-useragent
+tldextract

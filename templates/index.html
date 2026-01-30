@@ -1,210 +1,349 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Web Verify</title>
+    <title>WebGuard Global | Advanced URL Analysis</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        .gauge-circle { transition: stroke-dashoffset 1s ease-in-out; }
+        /* Custom Animations & Styles */
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Parallax / Aurora Background Effect */
+        .aurora-bg {
+            background-color: #0f172a;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+        }
+        
+        /* Glassmorphism Card */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Circular Progress Animation */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 1.5s ease-in-out, stroke 0.5s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Fade In Animation */
+        .fade-in { animation: fadeIn 0.6s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+
+        /* Loader Pulse */
+        .scanner-line {
+            height: 2px;
+            width: 100%;
+            background: #2dd4bf;
+            box-shadow: 0 0 10px #2dd4bf;
+            animation: scan 2s infinite linear;
+        }
+        @keyframes scan { 0% { transform: translateY(-20px); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(60px); opacity: 0; } }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+<body class="text-slate-200 antialiased min-h-screen flex flex-col">
 
-    <nav class="w-full bg-slate-800 p-4 shadow-lg border-b border-slate-700">
-        <div class="max-w-4xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-2">
-                <i class="fas fa-shield-virus text-teal-400 text-2xl"></i>
-                <span class="font-bold text-xl tracking-wide">WebGuard Global</span>
+    <div class="aurora-bg"></div>
+
+    <nav class="w-full glass-card border-b-0 border-b-slate-700/50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="bg-gradient-to-br from-teal-400 to-blue-600 w-8 h-8 rounded-lg flex items-center justify-center shadow-lg shadow-teal-500/20">
+                        <i class="fas fa-shield-alt text-white text-sm"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-white">WebGuard <span class="text-teal-400">Global</span></span>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <button onclick="openPrivacy()" class="text-sm text-slate-400 hover:text-white transition hidden md:block" id="navPrivacy">Privacy</button>
+                    <div class="relative">
+                        <select id="langSelect" onchange="changeLanguage()" class="appearance-none bg-slate-800 text-white pl-3 pr-8 py-1 rounded-md border border-slate-600 focus:outline-none focus:border-teal-500 text-sm cursor-pointer hover:bg-slate-700 transition">
+                            <option value="en">English</option>
+                            <option value="hu">Magyar</option>
+                            <option value="de">Deutsch</option>
+                            <option value="es">Español</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <select id="langSelect" onchange="changeLanguage()" class="bg-slate-700 text-white px-3 py-1 rounded border border-slate-600 focus:outline-none focus:border-teal-400">
-                <option value="en">English 🇬🇧</option>
-                <option value="hu">Magyar 🇭🇺</option>
-                <option value="de">Deutsch 🇩🇪</option>
-                <option value="es">Español 🇪🇸</option>
-            </select>
         </div>
     </nav>
 
-    <main class="max-w-3xl mx-auto mt-12 p-6">
+    <main class="flex-grow container mx-auto px-4 py-12 md:py-20 max-w-5xl">
         
-        <div class="text-center mb-10">
-            <h1 id="title" class="text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-blue-500">
-                Advanced URL Verification
+        <div class="text-center mb-12 fade-in" style="animation-delay: 0.1s;">
+            <h1 id="heroTitle" class="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-200 via-white to-blue-200 mb-6 drop-shadow-sm">
+                Is this website safe?
             </h1>
-            <p id="subtitle" class="text-slate-400 text-lg">
-                Deep analysis of SSL, DNS, WHOIS, and Content to detect fraud.
+            <p id="heroSubtitle" class="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Analyze URLs in real-time using advanced SSL verification, WHOIS data, and AI-driven fraud detection algorithms.
             </p>
         </div>
 
-        <div class="bg-slate-800 p-2 rounded-full flex shadow-xl border border-slate-700 relative z-10">
-            <input type="text" id="urlInput" placeholder="https://example.com" class="bg-transparent w-full px-6 py-4 text-white focus:outline-none placeholder-slate-500">
-            <button onclick="runAnalysis()" id="analyzeBtn" class="bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold rounded-full px-8 py-3 transition-all transform hover:scale-105">
-                CHECK
-            </button>
-        </div>
-
-        <div id="loader" class="hidden mt-8 text-center">
-            <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-400"></div>
-            <p id="scanningText" class="mt-4 text-teal-300 animate-pulse">Scanning worldwide databases...</p>
-        </div>
-
-        <div id="results" class="hidden mt-10">
-            
-            <div class="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8">
-                <div class="text-center md:text-left">
-                    <h2 id="trustScoreLabel" class="text-slate-400 uppercase tracking-widest text-sm font-semibold">Trust Score</h2>
-                    <div id="riskBadge" class="mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-gray-700 text-gray-300">
-                        CALCULATING...
+        <div class="relative max-w-3xl mx-auto mb-16 fade-in" style="animation-delay: 0.2s;">
+            <div class="absolute -inset-1 bg-gradient-to-r from-teal-500 to-blue-600 rounded-2xl blur opacity-25 animate-pulse"></div>
+            <div class="relative glass-card rounded-2xl p-2 flex flex-col md:flex-row shadow-2xl">
+                <div class="flex-grow relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-link text-slate-500"></i>
                     </div>
+                    <input type="text" id="urlInput" placeholder="https://example.com" 
+                        class="w-full bg-slate-900/50 text-white border-none rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-teal-500/50 placeholder-slate-500 transition-all font-mono text-sm md:text-base outline-none">
                 </div>
+                <button onclick="runAnalysis()" id="analyzeBtn" class="mt-2 md:mt-0 md:ml-2 bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-teal-500/20 whitespace-nowrap">
+                    ANALYZE URL
+                </button>
+            </div>
+            
+            <div class="flex justify-center gap-6 mt-6 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                <div class="flex items-center gap-2"><i class="fas fa-lock text-teal-500"></i> SSL Check</div>
+                <div class="flex items-center gap-2"><i class="fas fa-globe text-blue-500"></i> DNS Scan</div>
+                <div class="flex items-center gap-2"><i class="fas fa-database text-purple-500"></i> Real-time DB</div>
+            </div>
+        </div>
+
+        <div id="loader" class="hidden max-w-md mx-auto text-center py-10">
+            <div class="relative w-16 h-16 mx-auto mb-6 bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+                <i class="fas fa-fingerprint text-3xl text-slate-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></i>
+                <div class="scanner-line absolute top-0 w-full"></div>
+            </div>
+            <p id="scanningText" class="text-teal-400 font-mono animate-pulse">Connecting to security servers...</p>
+        </div>
+
+        <div id="results" class="hidden fade-in">
+            
+            <div class="glass-card rounded-3xl p-8 mb-8 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 
-                <div class="relative w-32 h-32">
-                    <svg class="w-full h-full" viewBox="0 0 100 100">
-                        <circle class="text-slate-700 stroke-current" stroke-width="8" cx="50" cy="50" r="40" fill="transparent"></circle>
-                        <circle id="scoreCircle" class="text-teal-500 progress-ring__circle stroke-current" stroke-width="8" stroke-linecap="round" cx="50" cy="50" r="40" fill="transparent" stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
-                    </svg>
-                    <div class="absolute top-0 left-0 w-full h-full flex items-center justify-center">
-                        <span id="scoreValue" class="text-3xl font-bold">0</span>
+                <div class="flex flex-col md:flex-row items-center justify-between gap-10">
+                    <div class="text-center md:text-left z-10">
+                        <h2 id="resultDomain" class="text-2xl md:text-3xl font-bold text-white mb-2 font-mono break-all">google.com</h2>
+                        <div id="riskBadge" class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold border bg-slate-800 border-slate-600 text-slate-300">
+                            PENDING...
+                        </div>
+                        <p id="resultSummary" class="mt-4 text-slate-400 max-w-md">Our algorithms have analyzed the certificate authority, domain age, and server headers.</p>
+                    </div>
+
+                    <div class="relative w-40 h-40 flex-shrink-0">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="#1e293b" stroke-width="8" />
+                            <circle id="scoreCircle" class="progress-ring__circle" cx="50" cy="50" r="45" fill="none" stroke="#2dd4bf" stroke-width="8" stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="scoreValue" class="text-4xl font-bold text-white">0</span>
+                            <span class="text-[10px] uppercase tracking-widest text-slate-500 mt-1">Score</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h3 id="techHeader" class="text-teal-400 font-bold mb-4 border-b border-slate-700 pb-2">Technical Analysis</h3>
-                    <ul class="space-y-3 text-sm">
-                        <li class="flex justify-between">
-                            <span class="text-slate-400">Domain Age:</span>
-                            <span id="resAge" class="font-mono text-white">...</span>
-                        </li>
-                        <li class="flex justify-between">
-                            <span class="text-slate-400">SSL Certificate:</span>
-                            <span id="resSSL" class="font-mono text-white">...</span>
-                        </li>
-                        <li class="flex justify-between">
-                            <span class="text-slate-400">Email Config (MX):</span>
-                            <span id="resMX" class="font-mono text-white">...</span>
-                        </li>
-                        <li class="flex justify-between">
-                            <span class="text-slate-400">Entropy:</span>
-                            <span id="resEntropy" class="font-mono text-white">...</span>
-                        </li>
-                    </ul>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 id="techTitle" class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                        <i class="fas fa-server text-blue-400"></i> Technical Analysis
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <span id="lblSsl" class="text-slate-400 text-sm">SSL Certificate</span>
+                            <span id="resSSL" class="font-mono text-sm text-white">Checking...</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <span id="lblOrg" class="text-slate-400 text-sm">Organization</span>
+                            <span id="resOrg" class="font-mono text-sm text-white text-right">Checking...</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <span id="lblAge" class="text-slate-400 text-sm">Domain Age</span>
+                            <span id="resAge" class="font-mono text-sm text-white">Checking...</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h3 id="logHeader" class="text-teal-400 font-bold mb-4 border-b border-slate-700 pb-2">Detection Logs</h3>
-                    <div id="logContainer" class="space-y-2 max-h-40 overflow-y-auto pr-2 text-sm">
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 id="logsTitle" class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                        <i class="fas fa-terminal text-teal-400"></i> Security Logs
+                    </h3>
+                    <div id="logContainer" class="space-y-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar text-sm font-mono">
                         </div>
                 </div>
+
             </div>
             
-            <button onclick="location.reload()" class="w-full mt-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition">
-                <i class="fas fa-redo mr-2"></i> <span id="resetBtn">Check Another URL</span>
-            </button>
-
+            <div class="mt-8 text-center">
+                <button onclick="location.reload()" class="text-slate-500 hover:text-white transition text-sm flex items-center justify-center gap-2 mx-auto">
+                    <i class="fas fa-redo"></i> <span id="resetBtn">Analyze another website</span>
+                </button>
+            </div>
         </div>
+
     </main>
 
+    <footer class="border-t border-slate-800 mt-12 bg-slate-900/80 backdrop-blur-sm">
+        <div class="max-w-7xl mx-auto px-4 py-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="text-slate-500 text-sm">
+                &copy; 2024 WebGuard Global. All rights reserved.
+            </div>
+            <div class="flex gap-6 text-sm">
+                <button onclick="openPrivacy()" class="text-slate-400 hover:text-teal-400 transition">Privacy Policy</button>
+                <a href="#" class="text-slate-400 hover:text-teal-400 transition">Terms of Service</a>
+                <a href="mailto:support@webguard.global" class="text-slate-400 hover:text-teal-400 transition">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="privacyModal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onclick="closePrivacy()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Privacy Policy</h2>
+                <button onclick="closePrivacy()" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="prose prose-invert prose-sm text-slate-300">
+                <p><strong>Last Updated:</strong> October 2024</p>
+                <p>WebGuard Global ("we", "us") is committed to protecting your privacy. This tool is designed to analyze public website data.</p>
+                
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">1. Data Collection</h3>
+                <p>We do not store the URLs you submit for longer than the duration of the analysis session. We do not track your personal IP address or browser history.</p>
+
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">2. How It Works</h3>
+                <p>The tool queries public databases (WHOIS, DNS, SSL Certificates). We act as a proxy to fetch this public information and present it in a readable format.</p>
+
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">3. No Warranty</h3>
+                <p>The "Trust Score" is an algorithmic estimation. We cannot guarantee that a "Safe" site is 100% secure, nor that a "Danger" site is definitely malicious. Always use your own judgment.</p>
+            </div>
+            <button onclick="closePrivacy()" class="mt-8 w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition">Close</button>
+        </div>
+    </div>
+
     <script>
+        // --- TRANSLATIONS ---
         const translations = {
             en: {
-                title: "Advanced URL Verification",
-                subtitle: "Deep analysis of SSL, DNS, WHOIS, and Content to detect fraud.",
+                heroTitle: "Is this website safe?",
+                heroSubtitle: "Analyze URLs in real-time using advanced SSL verification, WHOIS data, and AI-driven fraud detection algorithms.",
                 placeholder: "https://example.com",
-                btn: "CHECK",
-                scanning: "Scanning worldwide databases...",
-                trustScore: "TRUST SCORE",
-                tech: "Technical Analysis",
-                logs: "Detection Logs",
-                reset: "Check Another URL",
-                safe: "SAFE",
-                caution: "CAUTION",
-                danger: "DANGER / SCAM",
-                domainAge: "Domain Age",
-                ssl: "SSL Security",
-                mx: "Email Config (MX)"
+                btn: "ANALYZE URL",
+                scanning: "Connecting to security servers...",
+                risk_safe: "VERIFIED SAFE",
+                risk_caution: "CAUTION ADVISED",
+                risk_danger: "HIGH RISK / SCAM",
+                techTitle: "Technical Analysis",
+                logsTitle: "Security Logs",
+                lblSsl: "SSL Certificate",
+                lblOrg: "Organization",
+                lblAge: "Domain Age",
+                reset: "Analyze another website",
+                privacy: "Privacy Policy"
             },
             hu: {
-                title: "Fejlett Weboldal Ellenőrző",
-                subtitle: "Mélyreható SSL, DNS, WHOIS és tartalom elemzés a csalások kiszűrésére.",
+                heroTitle: "Biztonságos ez az oldal?",
+                heroSubtitle: "Elemezze az URL-eket valós időben fejlett SSL ellenőrzéssel, WHOIS adatokkal és csalásfelderítő algoritmusokkal.",
                 placeholder: "https://pelda.hu",
-                btn: "ELLENŐRZÉS",
-                scanning: "Globális adatbázisok keresése...",
-                trustScore: "BIZALMI PONTSZÁM",
-                tech: "Technikai Elemzés",
-                logs: "Észlelt Hibák",
-                reset: "Új Ellenőrzés",
-                safe: "BIZTONSÁGOS",
-                caution: "GYANÚS",
-                danger: "VESZÉLYES / CSALÁS",
-                domainAge: "Domain Kora",
-                ssl: "SSL Biztonság",
-                mx: "Email Konfig (MX)"
+                btn: "ELEMZÉS INDÍTÁSA",
+                scanning: "Kapcsolódás a biztonsági szerverekhez...",
+                risk_safe: "BIZTONSÁGOS",
+                risk_caution: "GYANÚS",
+                risk_danger: "VESZÉLYES / CSALÁS",
+                techTitle: "Technikai Elemzés",
+                logsTitle: "Biztonsági Napló",
+                lblSsl: "SSL Tanúsítvány",
+                lblOrg: "Szervezet",
+                lblAge: "Domain Kora",
+                reset: "Új weboldal ellenőrzése",
+                privacy: "Adatvédelmi Irányelvek"
             },
             de: {
-                title: "Erweiterte URL-Überprüfung",
-                subtitle: "Tiefenanalyse von SSL, DNS, WHOIS und Inhalt zur Betrugserkennung.",
+                heroTitle: "Ist diese Website sicher?",
+                heroSubtitle: "Analysieren Sie URLs in Echtzeit mit fortschrittlicher SSL-Verifizierung, WHOIS-Daten und Betrugserkennungsalgorithmen.",
                 placeholder: "https://beispiel.de",
-                btn: "PRÜFEN",
-                scanning: "Scannen weltweiter Datenbanken...",
-                trustScore: "VERTRAUENSWERT",
-                tech: "Technische Analyse",
-                logs: "Erkennungsprotokolle",
-                reset: "Neue Prüfung",
-                safe: "SICHER",
-                caution: "VORSICHT",
-                danger: "GEFAHR / BETRUG",
-                domainAge: "Domain Alter",
-                ssl: "SSL Sicherheit",
-                mx: "Email Konfig (MX)"
+                btn: "URL ANALYSIEREN",
+                scanning: "Verbindung zu Sicherheitsservern...",
+                risk_safe: "SICHER",
+                risk_caution: "VORSICHT",
+                risk_danger: "HOCHES RISIKO / BETRUG",
+                techTitle: "Technische Analyse",
+                logsTitle: "Sicherheitsprotokolle",
+                lblSsl: "SSL-Zertifikat",
+                lblOrg: "Organisation",
+                lblAge: "Domain-Alter",
+                reset: "Andere Website prüfen",
+                privacy: "Datenschutz"
             },
             es: {
-                title: "Verificación Avanzada de URL",
-                subtitle: "Análisis profundo de SSL, DNS, WHOIS y contenido para detectar fraudes.",
+                heroTitle: "¿Es seguro este sitio web?",
+                heroSubtitle: "Analice URLs en tiempo real utilizando verificación SSL avanzada, datos WHOIS y algoritmos de detección de fraude.",
                 placeholder: "https://ejemplo.es",
-                btn: "VERIFICAR",
-                scanning: "Escaneando bases de datos globales...",
-                trustScore: "PUNTUACIÓN",
-                tech: "Análisis Técnico",
-                logs: "Registros de Detección",
-                reset: "Verificar Otro",
-                safe: "SEGURO",
-                caution: "PRECAUCIÓN",
-                danger: "PELIGRO / ESTAFA",
-                domainAge: "Edad del Dominio",
-                ssl: "Seguridad SSL",
-                mx: "Config Email (MX)"
+                btn: "ANALIZAR URL",
+                scanning: "Conectando a servidores de seguridad...",
+                risk_safe: "VERIFICADO SEGURO",
+                risk_caution: "PRECAUCIÓN",
+                risk_danger: "ALTO RIESGO / ESTAFA",
+                techTitle: "Análisis Técnico",
+                logsTitle: "Registros de Seguridad",
+                lblSsl: "Certificado SSL",
+                lblOrg: "Organización",
+                lblAge: "Edad del Dominio",
+                reset: "Analizar otro sitio",
+                privacy: "Política de Privacidad"
             }
         };
 
         let currentLang = 'en';
 
+        // --- LANGUAGE SWITCHER ---
         function changeLanguage() {
             currentLang = document.getElementById('langSelect').value;
             const t = translations[currentLang];
             
-            document.getElementById('title').innerText = t.title;
-            document.getElementById('subtitle').innerText = t.subtitle;
+            document.getElementById('heroTitle').innerText = t.heroTitle;
+            document.getElementById('heroSubtitle').innerText = t.heroSubtitle;
             document.getElementById('urlInput').placeholder = t.placeholder;
             document.getElementById('analyzeBtn').innerText = t.btn;
             document.getElementById('scanningText').innerText = t.scanning;
-            document.getElementById('trustScoreLabel').innerText = t.trustScore;
-            document.getElementById('techHeader').innerText = t.tech;
-            document.getElementById('logHeader').innerText = t.logs;
+            document.getElementById('techTitle').innerHTML = `<i class="fas fa-server text-blue-400"></i> ${t.techTitle}`;
+            document.getElementById('logsTitle').innerHTML = `<i class="fas fa-terminal text-teal-400"></i> ${t.logsTitle}`;
+            document.getElementById('lblSsl').innerText = t.lblSsl;
+            document.getElementById('lblOrg').innerText = t.lblOrg;
+            document.getElementById('lblAge').innerText = t.lblAge;
             document.getElementById('resetBtn').innerText = t.reset;
+            document.getElementById('navPrivacy').innerText = t.privacy;
         }
 
+        // --- ANALYSIS LOGIC ---
         async function runAnalysis() {
             const url = document.getElementById('urlInput').value;
+            const t = translations[currentLang];
+
             if(!url) return;
 
-            // UI Updates
+            // Reset & Show Loader
             document.getElementById('results').classList.add('hidden');
             document.getElementById('loader').classList.remove('hidden');
-            
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analyzeBtn').classList.add('opacity-50', 'cursor-not-allowed');
+
             try {
                 const response = await fetch('/analyze', {
                     method: 'POST',
@@ -217,71 +356,109 @@
                 // Hide Loader
                 document.getElementById('loader').classList.add('hidden');
                 document.getElementById('results').classList.remove('hidden');
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('analyzeBtn').classList.remove('opacity-50', 'cursor-not-allowed');
 
                 if(data.error) {
                     alert(data.error); 
                     return;
                 }
 
-                // Update Score Visuals
-                const t = translations[currentLang];
+                // 1. Header Details
+                document.getElementById('resultDomain').innerText = data.details.domain || url;
+                
+                // 2. Score Animation (Circle)
                 const circle = document.getElementById('scoreCircle');
                 const radius = circle.r.baseVal.value;
                 const circumference = radius * 2 * Math.PI;
                 const offset = circumference - (data.score / 100) * circumference;
                 
-                circle.style.strokeDashoffset = offset;
+                // Reset animation
+                circle.style.strokeDashoffset = circumference;
+                setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
+
+                // 3. Colors & Badges
+                const badge = document.getElementById('riskBadge');
+                circle.classList.remove('stroke-teal-400', 'stroke-yellow-400', 'stroke-red-500');
                 
-                // Color coding based on score
-                if(data.score >= 80) circle.classList.replace('text-yellow-500', 'text-teal-500') || circle.classList.add('text-teal-500');
-                else if(data.score >= 50) {
-                    circle.classList.remove('text-teal-500');
-                    circle.classList.add('text-yellow-500');
+                if(data.score >= 80) {
+                    circle.setAttribute('stroke', '#2dd4bf'); // Teal
+                    badge.innerText = t.risk_safe;
+                    badge.className = "inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold border bg-teal-500/10 border-teal-500/50 text-teal-300 shadow-[0_0_10px_rgba(45,212,191,0.3)]";
+                    document.getElementById('resultSummary').innerText = "This site uses Verified Encryption and has a strong domain history.";
+                } else if(data.score >= 50) {
+                    circle.setAttribute('stroke', '#facc15'); // Yellow
+                    badge.innerText = t.risk_caution;
+                    badge.className = "inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold border bg-yellow-500/10 border-yellow-500/50 text-yellow-300";
+                    document.getElementById('resultSummary').innerText = "Standard security found, but verify the identity manually before purchasing.";
                 } else {
-                    circle.classList.remove('text-teal-500', 'text-yellow-500');
-                    circle.classList.add('text-red-500');
+                    circle.setAttribute('stroke', '#ef4444'); // Red
+                    badge.innerText = t.risk_danger;
+                    badge.className = "inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold border bg-red-500/10 border-red-500/50 text-red-300 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
+                    document.getElementById('resultSummary').innerText = "Warning: Technical indicators suggest this site may be fraudulent or unsafe.";
                 }
 
                 document.getElementById('scoreValue').innerText = data.score;
+
+                // 4. Grid Details
+                // SSL
+                let sslHtml = data.details.ssl 
+                    ? `<span class="text-teal-400"><i class="fas fa-lock"></i> Valid HTTPS</span>` 
+                    : `<span class="text-red-400"><i class="fas fa-lock-open"></i> Insecure</span>`;
+                document.getElementById('resSSL').innerHTML = sslHtml;
                 
-                const badge = document.getElementById('riskBadge');
-                if(data.risk_level === "SAFE") {
-                    badge.innerText = t.safe;
-                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-teal-500/20 text-teal-300 border border-teal-500/50";
-                } else if (data.risk_level === "CAUTION") {
-                    badge.innerText = t.caution;
-                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/50";
-                } else {
-                    badge.innerText = t.danger;
-                    badge.className = "mt-2 inline-block px-4 py-1 rounded-full text-sm font-bold bg-red-500/20 text-red-300 border border-red-500/50";
-                }
+                // Org
+                const orgName = (data.details.org && data.details.org !== 'Not Listed') ? data.details.org : "Identity Not Verified (DV)";
+                document.getElementById('resOrg').innerText = orgName;
+                document.getElementById('resOrg').className = (data.details.org && data.details.org !== 'Not Listed') 
+                    ? "font-mono text-sm text-teal-300 text-right" 
+                    : "font-mono text-sm text-slate-500 text-right italic";
 
-                // Details
+                // Age
                 document.getElementById('resAge').innerText = data.details.age;
-                document.getElementById('resSSL').innerHTML = data.details.ssl ? '<i class="fas fa-check text-green-400"></i>' : '<i class="fas fa-times text-red-400"></i>';
-                document.getElementById('resMX').innerHTML = data.details.mx ? '<i class="fas fa-check text-green-400"></i>' : '<i class="fas fa-times text-red-400"></i>';
-                document.getElementById('resEntropy').innerText = data.details.entropy;
 
-                // Logs
+                // 5. Logs
                 const logContainer = document.getElementById('logContainer');
                 logContainer.innerHTML = '';
-                if(data.logs.length === 0) {
-                    logContainer.innerHTML = `<div class="text-green-400"><i class="fas fa-check-circle"></i> No warnings found.</div>`;
-                } else {
+                
+                if(data.logs && data.logs.length > 0) {
                     data.logs.forEach(log => {
                         const div = document.createElement('div');
-                        const colorClass = log.type === 'danger' ? 'text-red-400' : 'text-yellow-400';
-                        const icon = log.type === 'danger' ? 'fa-exclamation-triangle' : 'fa-info-circle';
-                        div.className = `${colorClass} flex gap-2 items-start`;
-                        div.innerHTML = `<i class="fas ${icon} mt-1"></i> <span>${log.msg}</span>`;
+                        let colorClass = "text-slate-400";
+                        let iconClass = "fa-info-circle";
+                        
+                        if(log.type === 'success') { colorClass = "text-teal-400"; iconClass = "fa-check-circle"; }
+                        if(log.type === 'warning') { colorClass = "text-yellow-400"; iconClass = "fa-exclamation-triangle"; }
+                        if(log.type === 'danger') { colorClass = "text-red-400"; iconClass = "fa-skull"; }
+
+                        div.className = "flex gap-3 items-start p-2 hover:bg-slate-800/50 rounded transition border border-transparent hover:border-slate-700/50";
+                        div.innerHTML = `
+                            <i class="fas ${iconClass} mt-1 ${colorClass}"></i> 
+                            <span class="${log.type === 'success' ? 'text-slate-200' : colorClass}">${log.msg}</span>
+                        `;
                         logContainer.appendChild(div);
                     });
+                } else {
+                     logContainer.innerHTML = '<div class="text-slate-500 italic">No specific warnings found.</div>';
                 }
+
+                // Scroll to results
+                document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             } catch(e) {
                 console.error(e);
-                alert("Error analyzing URL. Check console.");
+                alert("Connection Error. Please check your internet or try again later.");
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('analyzeBtn').disabled = false;
             }
+        }
+
+        // --- MODAL LOGIC ---
+        function openPrivacy() {
+            document.getElementById('privacyModal').classList.remove('hidden');
+        }
+        function closePrivacy() {
+            document.getElementById('privacyModal').classList.add('hidden');
         }
     </script>
 </body>
