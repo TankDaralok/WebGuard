@@ -42,29 +42,22 @@
     }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        /* Custom Animations & Styles */
         body { font-family: 'Inter', sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         
-        /* Parallax / Aurora Background Effect */
         .aurora-bg {
             background-color: #0f172a;
             background-image: 
                 radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
                 radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
                 radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -1;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
         }
         
-        /* Glassmorphism Card */
         .glass-card {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(12px);
@@ -72,22 +65,17 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Circular Progress Animation */
         .progress-ring__circle {
             transition: stroke-dashoffset 1.5s ease-in-out, stroke 0.5s ease;
             transform: rotate(-90deg);
             transform-origin: 50% 50%;
         }
 
-        /* Fade In Animation */
         .fade-in { animation: fadeIn 0.6s ease-out forwards; opacity: 0; transform: translateY(10px); }
         @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
 
-        /* Loader Pulse */
         .scanner-line {
-            height: 2px;
-            width: 100%;
-            background: #2dd4bf;
+            height: 2px; width: 100%; background: #2dd4bf;
             box-shadow: 0 0 10px #2dd4bf;
             animation: scan 2s infinite linear;
         }
@@ -239,37 +227,56 @@
     <footer class="border-t border-slate-800 mt-12 bg-slate-900/80 backdrop-blur-sm">
         <div class="max-w-7xl mx-auto px-4 py-8 flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="text-slate-500 text-sm">
-                &copy; 2024 WebGuard Global. All rights reserved.
+                &copy; 2026 WebGuard Global. All rights reserved.
             </div>
             <div class="flex gap-6 text-sm">
                 <button onclick="openPrivacy()" class="text-slate-400 hover:text-teal-400 transition">Privacy Policy</button>
-                <a href="#" class="text-slate-400 hover:text-teal-400 transition">Terms of Service</a>
-                <a href="mailto:support@webguard.global" class="text-slate-400 hover:text-teal-400 transition">Contact</a>
+                <button onclick="openTerms()" class="text-slate-400 hover:text-teal-400 transition">Terms of Service</button>
             </div>
         </div>
     </footer>
-
-    <div id="privacyModal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
+    <div id="privacyModal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onclick="closePrivacy()"></div>
         <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto p-8">
             <div class="flex justify-between items-center mb-6">
-                <h2 id="privacyTitle" class="text-2xl font-bold text-white">Privacy Policy</h2>
-                <button onclick="closePrivacy()" aria-label="Close Modal" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+                <h2 class="text-2xl font-bold text-white">Privacy Policy</h2>
+                <button onclick="closePrivacy()" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div class="prose prose-invert prose-sm text-slate-300">
-                <p><strong>Last Updated:</strong> October 2024</p>
+                <p><strong>Last Updated:</strong> January 2026</p>
                 <p>WebGuard Global ("we", "us") is committed to protecting your privacy. This tool is designed to analyze public website data.</p>
-                
                 <h3 class="text-teal-400 mt-4 mb-2 font-bold">1. Data Collection</h3>
-                <p>We do not store the URLs you submit for longer than the duration of the analysis session. We do not track your personal IP address or browser history.</p>
-
+                <p>We do not store the URLs you submit for longer than the duration of the analysis session. We do not track your personal IP address.</p>
                 <h3 class="text-teal-400 mt-4 mb-2 font-bold">2. How It Works</h3>
-                <p>The tool queries public databases (WHOIS, DNS, SSL Certificates). We act as a proxy to fetch this public information and present it in a readable format.</p>
-
+                <p>The tool queries public databases (WHOIS, DNS, SSL Certificates). We act as a proxy to fetch this public information.</p>
                 <h3 class="text-teal-400 mt-4 mb-2 font-bold">3. No Warranty</h3>
-                <p>The "Trust Score" is an algorithmic estimation. We cannot guarantee that a "Safe" site is 100% secure, nor that a "Danger" site is definitely malicious. Always use your own judgment.</p>
+                <p>The "Trust Score" is an algorithmic estimation. We cannot guarantee that a "Safe" site is 100% secure.</p>
             </div>
             <button onclick="closePrivacy()" class="mt-8 w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition">Close</button>
+        </div>
+    </div>
+
+    <div id="termsModal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onclick="closeTerms()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto p-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Terms of Service</h2>
+                <button onclick="closeTerms()" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="prose prose-invert prose-sm text-slate-300">
+                <p><strong>Last Updated:</strong> January 2026</p>
+                <p>By using WebGuard Global, you agree to these terms.</p>
+                
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">1. Usage</h3>
+                <p>You may use this tool for personal, non-commercial security checks. Automated scanning or abuse of our API is strictly prohibited.</p>
+
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">2. Disclaimer of Warranties</h3>
+                <p>The Service is provided on an "AS IS" basis. We do not guarantee the accuracy of third-party data (WHOIS, Google Safe Browsing, VirusTotal).</p>
+
+                <h3 class="text-teal-400 mt-4 mb-2 font-bold">3. Limitation of Liability</h3>
+                <p>WebGuard Global shall not be liable for any damages resulting from your use of this tool. A high "Trust Score" does not guarantee a site is legitimate, and a low score does not definitively prove a site is malicious. Always exercise your own judgment.</p>
+            </div>
+            <button onclick="closeTerms()" class="mt-8 w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition">Close</button>
         </div>
     </div>
 
@@ -403,7 +410,7 @@
                 // 1. Header Details
                 document.getElementById('resultDomain').innerText = data.details.domain || url;
                 
-                // 2. Score Animation
+                // 2. Score Animation (Circle)
                 const circle = document.getElementById('scoreCircle');
                 const radius = circle.r.baseVal.value;
                 const circumference = radius * 2 * Math.PI;
@@ -435,7 +442,7 @@
 
                 document.getElementById('scoreValue').innerText = data.score;
 
-                // 4. Grid Details (Updated for Logic)
+                // 4. Grid Details
                 
                 // SSL
                 let sslHtml = data.details.ssl 
@@ -450,22 +457,20 @@
                     ? "font-mono text-sm text-teal-300 text-right" 
                     : "font-mono text-sm text-slate-500 text-right italic";
 
-                // Age (Logic for Colors)
+                // Age Logic (Color Coding)
                 const ageText = data.details.age_display;
                 const ageEl = document.getElementById('resAge');
                 ageEl.innerText = ageText;
                 
-                // Reset classes
-                ageEl.className = "font-mono text-sm";
-                
+                ageEl.className = "font-mono text-sm"; // Reset
                 if (ageText.includes("Hidden (GDPR)")) {
-                    ageEl.classList.add("text-yellow-400"); // Yellow for GDPR Privacy
+                    ageEl.classList.add("text-yellow-400");
                 } else if (ageText.includes("Hidden")) {
-                    ageEl.classList.add("text-orange-400"); // Orange for Suspicious Privacy
+                    ageEl.classList.add("text-orange-400");
                 } else if (parseInt(ageText) < 30) {
-                    ageEl.classList.add("text-red-400", "font-bold"); // Red for New Domains
+                    ageEl.classList.add("text-red-400", "font-bold");
                 } else {
-                    ageEl.classList.add("text-teal-400"); // Green for Old
+                    ageEl.classList.add("text-teal-400");
                 }
 
                 // 5. Logs
@@ -480,7 +485,7 @@
                         
                         if(log.type === 'success') { colorClass = "text-teal-400"; iconClass = "fa-check-circle"; }
                         if(log.type === 'warning') { colorClass = "text-yellow-400"; iconClass = "fa-exclamation-triangle"; }
-                        if(log.type === 'info') { colorClass = "text-blue-400"; iconClass = "fa-info-circle"; } // New Info type
+                        if(log.type === 'info') { colorClass = "text-blue-400"; iconClass = "fa-info-circle"; }
                         if(log.type === 'danger') { colorClass = "text-red-400"; iconClass = "fa-skull"; }
 
                         div.className = "flex gap-3 items-start p-2 hover:bg-slate-800/50 rounded transition border border-transparent hover:border-slate-700/50";
@@ -510,6 +515,12 @@
         }
         function closePrivacy() {
             document.getElementById('privacyModal').classList.add('hidden');
+        }
+        function openTerms() {
+            document.getElementById('termsModal').classList.remove('hidden');
+        }
+        function closeTerms() {
+            document.getElementById('termsModal').classList.add('hidden');
         }
     </script>
 </body>
