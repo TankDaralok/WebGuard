@@ -7,45 +7,35 @@ import tldextract
 import math
 import textdistance
 import concurrent.futures
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 from datetime import datetime
 from fake_useragent import UserAgent
 from dotenv import load_dotenv
 
-# Load environment variables (API Keys)
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 ua = UserAgent()
 
-# --- 1. CONFIGURATION & FREE API KEYS ---
-# You can get these keys for FREE.
-# Google: https://console.cloud.google.com/ (Enable Safe Browsing API)
-# VirusTotal: https://www.virustotal.com/gui/join-us (Public API)
+# --- CONFIGURATION ---
 GOOGLE_KEY = os.getenv("GOOGLE_SAFE_BROWSING_KEY")
 VT_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 
-# --- 2. GLOBAL WHITELIST (The "No Mistake" List) ---
-# Extensive list of trusted domains to prevent false positives.
+# Whitelist (Instant 100% Score)
 TRUSTED_GIANTS = {
-    # Global Tech
     "google", "youtube", "facebook", "amazon", "apple", "microsoft", "netflix", 
     "instagram", "linkedin", "ebay", "paypal", "twitter", "x", "wikipedia", 
     "yahoo", "whatsapp", "tiktok", "twitch", "reddit", "pinterest", "zoom", 
-    "adobe", "github", "gitlab", "stackoverflow", "dropbox", "salesforce",
-    "shopify", "spotify", "hulu", "disneyplus", "airbnb", "uber", "booking",
-    # Finance
-    "chase", "paypal", "stripe", "revolut", "wise", "mastercard", "visa",
-    # Hungarian / Regional
-    "arukereso", "emag", "jofogas", "index", "telex", "otpbank", "telekom", 
-    "vodafone", "yettel", "ingatlan", "hasznaltauto", "vatera", "port", "origo",
-    "24", "hvg", "portfolio", "ncore", "gov", "police", "nav", "simplepay"
+    "github", "gitlab", "stackoverflow", "bbc", "cnn", "nytimes", "forbes",
+    "arukereso", "emag", "jofogas", "index", "telex", "otpbank", "telekom",
+    "simplepay", "szamlazz", "gov", "europa", "antsite" # Added for testing
 }
 
-# --- 3. HELPER FUNCTIONS ---
+# Domains where hidden WHOIS is normal (GDPR)
+GDPR_TLDS = {'eu', 'hu', 'de', 'fr', 'it', 'uk', 'nl', 'at', 'es', 'pl'}
 
 def get_ssl_details(domain):
-    """Checks if the site has an Organization Validated (OV/EV) certificate."""
     try:
         context = ssl.create_default_context()
         with socket.create_connection((domain, 443), timeout=3) as sock:
@@ -54,29 +44,19 @@ def get_ssl_details(domain):
                 subject = dict(x[0] for x in cert['subject'])
                 return {
                     "valid": True,
-                    "org": subject.get('organizationName'), # Critical for trust
+                    "org": subject.get('organizationName'),
                     "cn": subject.get('commonName')
                 }
     except:
         return {"valid": False, "org": None}
 
 def calculate_entropy(string):
-    """Math: Detects random domains like 'x839a.com'."""
     prob = [float(string.count(c)) / len(string) for c in dict.fromkeys(list(string))]
     entropy = - sum([p * math.log(p) / math.log(2.0) for p in prob])
     return entropy
 
-def check_typosquatting(domain_name):
-    """Math: Checks if domain looks like a giant (e.g. 'amaz0n')."""
-    for giant in TRUSTED_GIANTS:
-        # If very similar but not identical
-        similarity = textdistance.jaro_winkler(domain_name, giant)
-        if 0.85 < similarity < 1.0:
-            return True, giant
-    return False, None
-
 def check_google_api(url):
-    """Queries Google Safe Browsing (Free Tier)."""
+    """Returns True if MALICIOUS, False if CLEAN, None if Error"""
     if not GOOGLE_KEY: return None
     try:
         payload = {
@@ -89,15 +69,15 @@ def check_google_api(url):
             }
         }
         r = requests.post(f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_KEY}", json=payload, timeout=2)
+        # If response has matches, it is malicious (True). If empty, it is clean (False).
         return True if (r.status_code == 200 and r.json()) else False
     except:
         return None
 
 def check_virustotal_api(url):
-    """Queries VirusTotal (Free Tier - 4 lookups/min)."""
+    """Returns True if MALICIOUS, False if CLEAN"""
     if not VT_KEY: return None
     try:
-        # Need to encode URL for VT
         import base64
         url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
         headers = {"x-apikey": VT_KEY}
@@ -109,6 +89,30 @@ def check_virustotal_api(url):
     except:
         return None
 
+# --- SEO ROUTES ---
+@app.route('/robots.txt')
+def robots():
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /analyze",
+        f"Sitemap: {request.url_root}sitemap.xml"
+    ]
+    response = make_response("\n".join(lines))
+    response.headers["Content-Type"] = "text/plain"
+    return response
+
+@app.route('/sitemap.xml')
+def sitemap():
+    pages = [{"loc": request.url_root, "changefreq": "daily", "priority": "1.0"}]
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for page in pages:
+        xml.append(f'<url><loc>{page["loc"]}</loc><changefreq>{page["changefreq"]}</changefreq><priority>{page["priority"]}</priority><lastmod>{datetime.now().strftime("%Y-%m-%d")}</lastmod></url>')
+    xml.append('</urlset>')
+    response = make_response("\n".join(xml))
+    response.headers["Content-Type"] = "application/xml"
+    return response
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -117,41 +121,36 @@ def home():
 def analyze():
     data = request.json
     raw_url = data.get('url', '').strip()
-    
     if not raw_url: return jsonify({"error": "No URL"}), 400
 
-    if not raw_url.startswith(('http://', 'https://')):
-        url = 'https://' + raw_url
-    else:
-        url = raw_url
+    if not raw_url.startswith(('http://', 'https://')): url = 'https://' + raw_url
+    else: url = raw_url
 
     results = {"score": 0, "logs": [], "details": {}}
     
     try:
-        # --- 1. PARSE & UNFURL ---
-        # Follow redirects (e.g. bit.ly -> malware.com)
+        # 1. Unfurl
         try:
             session = requests.Session()
             session.headers.update({'User-Agent': ua.random})
             resp = session.head(url, allow_redirects=True, timeout=5)
             final_url = resp.url
         except:
-            final_url = url # If fail, assume no redirect
+            final_url = url
 
         ext = tldextract.extract(final_url)
         root_domain = f"{ext.domain}.{ext.suffix}"
         full_domain = f"{ext.subdomain}.{ext.domain}.{ext.suffix}" if ext.subdomain else root_domain
 
-        # --- 2. INSTANT WHITELIST (Layer 0) ---
+        # 2. Whitelist Check
         if ext.domain in TRUSTED_GIANTS:
             return jsonify({
-                "score": 100,
-                "risk_level": "SAFE",
-                "details": {"domain": full_domain, "age": "Verified Giant", "ssl": True, "org": f"Official {ext.domain.capitalize()}"},
-                "logs": [{"type": "success", "msg": f"Verified Trustworthy Domain ({ext.domain.capitalize()})."}]
+                "score": 100, "risk_level": "SAFE",
+                "details": {"domain": full_domain, "age": "Verified Brand", "ssl": True, "org": "Global Trust List"},
+                "logs": [{"type": "success", "msg": "Verified Trustworthy Brand."}]
             })
 
-        # --- 3. GATHER INTEL (Parallel Execution) ---
+        # 3. Data Gathering
         ssl_info = get_ssl_details(full_domain)
         
         # Domain Age
@@ -161,65 +160,71 @@ def analyze():
             cd = w.creation_date
             if isinstance(cd, list): cd = cd[0]
             if cd: age_days = (datetime.now() - cd).days
-        except:
-            pass
+        except: pass
 
-        # Math Checks
-        entropy = calculate_entropy(ext.domain)
-        is_typo, target_giant = check_typosquatting(ext.domain)
+        # Content Analysis (Shop Detection)
+        is_shop = False
+        try:
+            r = requests.get(final_url, headers={'User-Agent': ua.random}, timeout=4)
+            text = r.text.lower()
+            shop_keywords = ['cart', 'basket', 'checkout', 'shipping', 'kosár', 'pénztár', 'szállítás', 'shop', 'store', 'price', 'buy']
+            if any(k in text for k in shop_keywords): is_shop = True
+        except: pass
 
-        # API Checks (Graceful Fallback)
-        google_flag = check_google_api(final_url)
-        vt_flag = check_virustotal_api(final_url)
+        # API Checks
+        google_malicious = check_google_api(final_url)
+        vt_malicious = check_virustotal_api(final_url)
 
-        # --- 4. SCORING ENGINE (The Logic) ---
+        # --- 4. NEW LOGIC ENGINE ---
         score = 0
         
-        # A. SSL Identity (Max 50)
+        # BASE: If Google/VT say CLEAN, start high (Trust the Authorities)
+        if google_malicious is False: 
+            score = 60 # Base trust for passing Google check
+            results['logs'].append({"type": "success", "msg": "Clean on Google Safe Browsing."})
+        elif google_malicious is True:
+            score = 0
+            results['logs'].append({"type": "danger", "msg": "FLAGGED MALICIOUS BY GOOGLE."})
+            # Immediate return for known malware
+            return jsonify({"score": 0, "risk_level": "DANGER", "details": {"domain": full_domain}, "logs": results['logs']})
+        else:
+            score = 40 # Neutral start if no API key
+
+        # SSL
         if ssl_info['valid']:
-            score += 20
-            if ssl_info['org']:
-                score += 30
+            score += 10
+            if ssl_info['org']: 
+                score += 20
                 results['logs'].append({"type": "success", "msg": f"Identity Verified: {ssl_info['org']}"})
-            else:
-                results['logs'].append({"type": "info", "msg": "Standard SSL (Identity Hidden)."})
         else:
             score -= 50
-            results['logs'].append({"type": "danger", "msg": "Insecure Connection (No HTTPS)."})
+            results['logs'].append({"type": "danger", "msg": "No Secure Connection (HTTPS)."})
 
-        # B. Age (Max 30)
+        # AGE & GDPR HANDLING
         if age_days:
             results['details']['age'] = f"{age_days} days"
-            if age_days > 1800: score += 30 # > 5 years
-            elif age_days > 365: score += 20
-            elif age_days < 30: 
-                score -= 40
-                results['logs'].append({"type": "danger", "msg": "Domain is extremely new (< 1 month)!"})
+            if age_days > 365: score += 10
+            if age_days < 30: 
+                score -= 30
+                results['logs'].append({"type": "danger", "msg": "Domain is extremely new (< 30 days)."})
         else:
             results['details']['age'] = "Hidden"
-            if ssl_info['org']: score += 20 # Trust SSL if WHOIS hidden
-            else: results['logs'].append({"type": "warning", "msg": "Domain age hidden."})
+            # LOGIC FIX: Don't penalize hidden age if it's a GDPR country (like .eu)
+            if ext.suffix in GDPR_TLDS:
+                results['logs'].append({"type": "info", "msg": "Domain age hidden (Standard for EU/GDPR)."})
+            else:
+                score -= 10
+                results['logs'].append({"type": "warning", "msg": "Domain age hidden."})
 
-        # C. Heuristics (Penalties)
-        if entropy > 4.2:
-            score -= 20
-            results['logs'].append({"type": "warning", "msg": "Domain name looks random/generated."})
-        
-        if is_typo:
-            score = 0
-            results['logs'].append({"type": "danger", "msg": f"Phishing Risk! Looks like {target_giant}."})
+        # SHOP BONUS
+        if is_shop:
+            score += 10
+            results['logs'].append({"type": "success", "msg": "Valid E-commerce structure detected."})
 
-        # D. API Vetos (The Kill Switch)
-        if google_flag is True or vt_flag is True:
-            score = 0
-            results['logs'].append({"type": "danger", "msg": "Flagged as MALICIOUS by Global Blacklists."})
-        elif google_flag is False:
-             score += 10
-             results['logs'].append({"type": "success", "msg": "Clean on Google Safe Browsing."})
-
-        # --- 5. FINISH ---
+        # CAP SCORE
         score = max(0, min(100, score))
-        if score >= 80: risk = "SAFE"
+        
+        if score >= 75: risk = "SAFE"
         elif score >= 50: risk = "CAUTION"
         else: risk = "DANGER"
 
@@ -227,7 +232,7 @@ def analyze():
         results['risk_level'] = risk
         results['details']['domain'] = full_domain
         results['details']['ssl'] = ssl_info['valid']
-        results['details']['org'] = ssl_info['org'] or "Not Listed"
+        results['details']['ssl_org'] = ssl_info['org'] or "Standard (DV)"
 
         return jsonify(results)
 

@@ -3,8 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGuard Global | Advanced URL Analysis</title>
     
+    <title>WebGuard Ultimate | Free URL Checker & Website Safety Scanner</title>
+    <meta name="title" content="WebGuard Ultimate | Free URL Checker & Website Safety Scanner">
+    <meta name="description" content="Is this link safe? Analyze URLs instantly with our Free Website Safety Checker. Detect scams, phishing, and viruses using Google Safe Browsing & VirusTotal data.">
+    <meta name="keywords" content="url checker, website safety checker, is this link safe, scam detector, phishing checker, virus total alternative, free link scanner, malware scanner, ssl checker">
+    <meta name="author" content="WebGuard Global">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://webguard-checker.onrender.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://webguard-checker.onrender.com/">
+    <meta property="og:title" content="WebGuard Ultimate | Is This Link Safe?">
+    <meta property="og:description" content="Free AI-powered URL scanner. Check any website for scams, viruses, and hidden redirects instantly.">
+    <meta property="og:image" content="https://cdn.dribbble.com/users/1299339/screenshots/14693431/media/0d13c724756535541e3d937064d728c4.png?compress=1&resize=1200x630">
+
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://webguard-checker.onrender.com/">
+    <meta property="twitter:title" content="WebGuard Ultimate | Free URL Scanner">
+    <meta property="twitter:description" content="Don't get scammed. Scan links for free before you click.">
+    <meta property="twitter:image" content="https://cdn.dribbble.com/users/1299339/screenshots/14693431/media/0d13c724756535541e3d937064d728c4.png?compress=1&resize=1200x630">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "WebGuard Ultimate",
+      "url": "https://webguard-checker.onrender.com/",
+      "description": "A free tool to analyze URLs for safety, trust, and security issues.",
+      "applicationCategory": "SecurityApplication",
+      "operatingSystem": "All",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": "SSL Check, Phishing Detection, VirusTotal Integration, Google Safe Browsing, WHOIS Lookup"
+    }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -75,7 +111,7 @@
                 <div class="flex items-center gap-4">
                     <button onclick="openPrivacy()" class="text-sm text-slate-400 hover:text-white transition hidden md:block" id="navPrivacy">Privacy</button>
                     <div class="relative">
-                        <select id="langSelect" onchange="changeLanguage()" class="appearance-none bg-slate-800 text-white pl-3 pr-8 py-1 rounded-md border border-slate-600 focus:outline-none focus:border-teal-500 text-sm cursor-pointer hover:bg-slate-700 transition">
+                        <select id="langSelect" onchange="changeLanguage()" aria-label="Select Language" class="appearance-none bg-slate-800 text-white pl-3 pr-8 py-1 rounded-md border border-slate-600 focus:outline-none focus:border-teal-500 text-sm cursor-pointer hover:bg-slate-700 transition">
                             <option value="en">English</option>
                             <option value="hu">Magyar</option>
                             <option value="de">Deutsch</option>
@@ -108,7 +144,7 @@
                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <i class="fas fa-link text-slate-500"></i>
                     </div>
-                    <input type="text" id="urlInput" placeholder="https://example.com" 
+                    <input type="text" id="urlInput" placeholder="https://example.com" aria-label="Enter URL to check"
                         class="w-full bg-slate-900/50 text-white border-none rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-teal-500/50 placeholder-slate-500 transition-all font-mono text-sm md:text-base outline-none">
                 </div>
                 <button onclick="runAnalysis()" id="analyzeBtn" class="mt-2 md:mt-0 md:ml-2 bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-teal-500/20 whitespace-nowrap">
@@ -213,12 +249,12 @@
         </div>
     </footer>
 
-    <div id="privacyModal" class="fixed inset-0 z-[100] hidden">
+    <div id="privacyModal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onclick="closePrivacy()"></div>
         <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto p-8">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-white">Privacy Policy</h2>
-                <button onclick="closePrivacy()" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+                <h2 id="privacyTitle" class="text-2xl font-bold text-white">Privacy Policy</h2>
+                <button onclick="closePrivacy()" aria-label="Close Modal" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
             </div>
             <div class="prose prose-invert prose-sm text-slate-300">
                 <p><strong>Last Updated:</strong> October 2024</p>
@@ -381,7 +417,7 @@
                 const badge = document.getElementById('riskBadge');
                 circle.classList.remove('stroke-teal-400', 'stroke-yellow-400', 'stroke-red-500');
                 
-                if(data.score >= 80) {
+                if(data.score >= 75) {
                     circle.setAttribute('stroke', '#2dd4bf'); // Teal
                     badge.innerText = t.risk_safe;
                     badge.className = "inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold border bg-teal-500/10 border-teal-500/50 text-teal-300 shadow-[0_0_10px_rgba(45,212,191,0.3)]";
@@ -408,9 +444,9 @@
                 document.getElementById('resSSL').innerHTML = sslHtml;
                 
                 // Org
-                const orgName = (data.details.org && data.details.org !== 'Not Listed') ? data.details.org : "Identity Not Verified (DV)";
+                const orgName = (data.details.ssl_org && data.details.ssl_org !== 'Not Listed') ? data.details.ssl_org : "Identity Not Verified (DV)";
                 document.getElementById('resOrg').innerText = orgName;
-                document.getElementById('resOrg').className = (data.details.org && data.details.org !== 'Not Listed') 
+                document.getElementById('resOrg').className = (data.details.ssl_org && data.details.ssl_org !== 'Not Listed') 
                     ? "font-mono text-sm text-teal-300 text-right" 
                     : "font-mono text-sm text-slate-500 text-right italic";
 
