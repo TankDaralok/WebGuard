@@ -5,14 +5,12 @@ import whois
 import requests
 import tldextract
 import math
-import textdistance
 import concurrent.futures
 from flask import Flask, render_template, request, jsonify, make_response
 from datetime import datetime
 from fake_useragent import UserAgent
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -22,17 +20,16 @@ ua = UserAgent()
 GOOGLE_KEY = os.getenv("GOOGLE_SAFE_BROWSING_KEY")
 VT_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 
-# Whitelist (Instant 100% Score)
 TRUSTED_GIANTS = {
     "google", "youtube", "facebook", "amazon", "apple", "microsoft", "netflix", 
     "instagram", "linkedin", "ebay", "paypal", "twitter", "x", "wikipedia", 
     "yahoo", "whatsapp", "tiktok", "twitch", "reddit", "pinterest", "zoom", 
     "github", "gitlab", "stackoverflow", "bbc", "cnn", "nytimes", "forbes",
     "arukereso", "emag", "jofogas", "index", "telex", "otpbank", "telekom",
-    "simplepay", "szamlazz", "gov", "europa", "antsite" # Added for testing
+    "simplepay", "szamlazz", "gov", "europa", "antsite"
 }
 
-# Domains where hidden WHOIS is normal (GDPR)
+# TLDs where hiding WHOIS is the LAW (GDPR), not a scam tactic.
 GDPR_TLDS = {'eu', 'hu', 'de', 'fr', 'it', 'uk', 'nl', 'at', 'es', 'pl'}
 
 def get_ssl_details(domain):
@@ -50,13 +47,7 @@ def get_ssl_details(domain):
     except:
         return {"valid": False, "org": None}
 
-def calculate_entropy(string):
-    prob = [float(string.count(c)) / len(string) for c in dict.fromkeys(list(string))]
-    entropy = - sum([p * math.log(p) / math.log(2.0) for p in prob])
-    return entropy
-
 def check_google_api(url):
-    """Returns True if MALICIOUS, False if CLEAN, None if Error"""
     if not GOOGLE_KEY: return None
     try:
         payload = {
@@ -69,13 +60,11 @@ def check_google_api(url):
             }
         }
         r = requests.post(f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_KEY}", json=payload, timeout=2)
-        # If response has matches, it is malicious (True). If empty, it is clean (False).
         return True if (r.status_code == 200 and r.json()) else False
     except:
         return None
 
 def check_virustotal_api(url):
-    """Returns True if MALICIOUS, False if CLEAN"""
     if not VT_KEY: return None
     try:
         import base64
@@ -92,12 +81,7 @@ def check_virustotal_api(url):
 # --- SEO ROUTES ---
 @app.route('/robots.txt')
 def robots():
-    lines = [
-        "User-agent: *",
-        "Allow: /",
-        "Disallow: /analyze",
-        f"Sitemap: {request.url_root}sitemap.xml"
-    ]
+    lines = ["User-agent: *", "Allow: /", "Disallow: /analyze", f"Sitemap: {request.url_root}sitemap.xml"]
     response = make_response("\n".join(lines))
     response.headers["Content-Type"] = "text/plain"
     return response
@@ -129,7 +113,7 @@ def analyze():
     results = {"score": 0, "logs": [], "details": {}}
     
     try:
-        # 1. Unfurl
+        # 1. Unfurl Redirects
         try:
             session = requests.Session()
             session.headers.update({'User-Agent': ua.random})
@@ -146,14 +130,14 @@ def analyze():
         if ext.domain in TRUSTED_GIANTS:
             return jsonify({
                 "score": 100, "risk_level": "SAFE",
-                "details": {"domain": full_domain, "age": "Verified Brand", "ssl": True, "org": "Global Trust List"},
+                "details": {"domain": full_domain, "age_display": "Verified Brand", "ssl": True, "org": "Global Trust List"},
                 "logs": [{"type": "success", "msg": "Verified Trustworthy Brand."}]
             })
 
         # 3. Data Gathering
         ssl_info = get_ssl_details(full_domain)
         
-        # Domain Age
+        # Domain Age Fetch
         age_days = None
         try:
             w = whois.whois(root_domain)
@@ -162,7 +146,7 @@ def analyze():
             if cd: age_days = (datetime.now() - cd).days
         except: pass
 
-        # Content Analysis (Shop Detection)
+        # Shop Detection
         is_shop = False
         try:
             r = requests.get(final_url, headers={'User-Agent': ua.random}, timeout=4)
@@ -173,22 +157,18 @@ def analyze():
 
         # API Checks
         google_malicious = check_google_api(final_url)
-        vt_malicious = check_virustotal_api(final_url)
-
-        # --- 4. NEW LOGIC ENGINE ---
+        
+        # --- 4. SCORING LOGIC ---
         score = 0
         
-        # BASE: If Google/VT say CLEAN, start high (Trust the Authorities)
+        # Base Score (API Trust)
         if google_malicious is False: 
-            score = 60 # Base trust for passing Google check
+            score = 60
             results['logs'].append({"type": "success", "msg": "Clean on Google Safe Browsing."})
         elif google_malicious is True:
-            score = 0
-            results['logs'].append({"type": "danger", "msg": "FLAGGED MALICIOUS BY GOOGLE."})
-            # Immediate return for known malware
-            return jsonify({"score": 0, "risk_level": "DANGER", "details": {"domain": full_domain}, "logs": results['logs']})
+            return jsonify({"score": 0, "risk_level": "DANGER", "details": {"domain": full_domain}, "logs": [{"type": "danger", "msg": "FLAGGED MALICIOUS BY GOOGLE."}]})
         else:
-            score = 40 # Neutral start if no API key
+            score = 40 # Neutral start
 
         # SSL
         if ssl_info['valid']:
@@ -200,28 +180,39 @@ def analyze():
             score -= 50
             results['logs'].append({"type": "danger", "msg": "No Secure Connection (HTTPS)."})
 
-        # AGE & GDPR HANDLING
-        if age_days:
-            results['details']['age'] = f"{age_days} days"
-            if age_days > 365: score += 10
-            if age_days < 30: 
-                score -= 30
-                results['logs'].append({"type": "danger", "msg": "Domain is extremely new (< 30 days)."})
-        else:
-            results['details']['age'] = "Hidden"
-            # LOGIC FIX: Don't penalize hidden age if it's a GDPR country (like .eu)
-            if ext.suffix in GDPR_TLDS:
-                results['logs'].append({"type": "info", "msg": "Domain age hidden (Standard for EU/GDPR)."})
-            else:
+        # --- REFINED AGE LOGIC ---
+        # We need to distinguish between "New" (Bad) and "Hidden" (Neutral/Warning)
+        
+        if age_days is not None:
+            # AGE IS VISIBLE
+            results['details']['age_display'] = f"{age_days} days"
+            
+            if age_days < 30:
+                score -= 40
+                results['logs'].append({"type": "danger", "msg": f"CRITICAL: Domain is very new ({age_days} days). High Risk."})
+            elif age_days < 180:
                 score -= 10
-                results['logs'].append({"type": "warning", "msg": "Domain age hidden."})
+                results['logs'].append({"type": "warning", "msg": "Domain is less than 6 months old."})
+            else:
+                score += 10
+                results['logs'].append({"type": "success", "msg": "Domain has a long history (> 6 months)."})
+        else:
+            # AGE IS HIDDEN
+            if ext.suffix in GDPR_TLDS:
+                # GDPR Case (e.g. .eu, .hu) -> Neutral
+                results['details']['age_display'] = "Hidden (GDPR)"
+                results['logs'].append({"type": "info", "msg": "Registration date hidden due to GDPR (Normal for EU)."})
+                # No score penalty, just info
+            else:
+                # Suspicious Case (e.g. .com hiding age) -> Warning
+                results['details']['age_display'] = "Hidden / Private"
+                score -= 15
+                results['logs'].append({"type": "warning", "msg": "Registration date is hidden. We cannot verify domain age."})
 
-        # SHOP BONUS
-        if is_shop:
-            score += 10
-            results['logs'].append({"type": "success", "msg": "Valid E-commerce structure detected."})
+        # Shop Bonus
+        if is_shop: score += 10
 
-        # CAP SCORE
+        # Final Calc
         score = max(0, min(100, score))
         
         if score >= 75: risk = "SAFE"

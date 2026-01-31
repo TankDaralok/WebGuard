@@ -403,13 +403,12 @@
                 // 1. Header Details
                 document.getElementById('resultDomain').innerText = data.details.domain || url;
                 
-                // 2. Score Animation (Circle)
+                // 2. Score Animation
                 const circle = document.getElementById('scoreCircle');
                 const radius = circle.r.baseVal.value;
                 const circumference = radius * 2 * Math.PI;
                 const offset = circumference - (data.score / 100) * circumference;
                 
-                // Reset animation
                 circle.style.strokeDashoffset = circumference;
                 setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
 
@@ -436,7 +435,8 @@
 
                 document.getElementById('scoreValue').innerText = data.score;
 
-                // 4. Grid Details
+                // 4. Grid Details (Updated for Logic)
+                
                 // SSL
                 let sslHtml = data.details.ssl 
                     ? `<span class="text-teal-400"><i class="fas fa-lock"></i> Valid HTTPS</span>` 
@@ -450,8 +450,23 @@
                     ? "font-mono text-sm text-teal-300 text-right" 
                     : "font-mono text-sm text-slate-500 text-right italic";
 
-                // Age
-                document.getElementById('resAge').innerText = data.details.age;
+                // Age (Logic for Colors)
+                const ageText = data.details.age_display;
+                const ageEl = document.getElementById('resAge');
+                ageEl.innerText = ageText;
+                
+                // Reset classes
+                ageEl.className = "font-mono text-sm";
+                
+                if (ageText.includes("Hidden (GDPR)")) {
+                    ageEl.classList.add("text-yellow-400"); // Yellow for GDPR Privacy
+                } else if (ageText.includes("Hidden")) {
+                    ageEl.classList.add("text-orange-400"); // Orange for Suspicious Privacy
+                } else if (parseInt(ageText) < 30) {
+                    ageEl.classList.add("text-red-400", "font-bold"); // Red for New Domains
+                } else {
+                    ageEl.classList.add("text-teal-400"); // Green for Old
+                }
 
                 // 5. Logs
                 const logContainer = document.getElementById('logContainer');
@@ -465,6 +480,7 @@
                         
                         if(log.type === 'success') { colorClass = "text-teal-400"; iconClass = "fa-check-circle"; }
                         if(log.type === 'warning') { colorClass = "text-yellow-400"; iconClass = "fa-exclamation-triangle"; }
+                        if(log.type === 'info') { colorClass = "text-blue-400"; iconClass = "fa-info-circle"; } // New Info type
                         if(log.type === 'danger') { colorClass = "text-red-400"; iconClass = "fa-skull"; }
 
                         div.className = "flex gap-3 items-start p-2 hover:bg-slate-800/50 rounded transition border border-transparent hover:border-slate-700/50";
@@ -478,7 +494,6 @@
                      logContainer.innerHTML = '<div class="text-slate-500 italic">No specific warnings found.</div>';
                 }
 
-                // Scroll to results
                 document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
             } catch(e) {
